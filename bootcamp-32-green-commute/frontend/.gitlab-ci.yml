@@ -1,0 +1,53 @@
+image: 
+   name: amazon/aws-cli
+   entrypoint: [""]   
+services:
+    - name: docker:20-dind
+      command: ["--tls=false"]
+
+variables:
+  DOCKER_HOST: tcp://docker:2375
+  DOCKER_DRIVER: overlay
+  DOCKER_TLS_CERTDIR: ""
+
+stages:
+    - Build image and Push to Docker Hub
+    - deploy
+docker build and push:
+    stage: Build image and Push to Docker Hub
+    only:
+        - frontend
+
+    before_script:
+        - amazon-linux-extras install docker
+        - aws --version
+        - docker --version
+        - echo "$REGISTRY_PASSWORD" | docker login -u "$REGISTRY_USER" --password-stdin
+    script:
+        - cd frontend
+        - docker build . -t bc322211:1
+        - docker tag bc322211:1 "$REGISTRY_USER"/frontend_bc322211:1
+        - docker push "$REGISTRY_USER"/frontend_bc322211:1
+    environment:
+       name: staging
+       url:
+deploy:
+  stage: deploy  
+  image: kroniak/ssh-client
+   
+  before_script:
+      - mkdir ~/.ssh
+      - echo -e "$KEY_PAIR" > ~/.ssh/id_rsa
+      - chmod 600 ~/.ssh/id_rsa
+      - echo -e "Host *\n\tStrictHostKeyChecking no\n\n" > ~/.ssh/config
+  script: 
+    # - ssh ubuntu@18.223.206.231 "docker stop bootcamp"
+    # - ssh ubuntu@18.223.206.231 "docker rm bootcamp"
+    - ssh ec2-user@18.217.145.156 "sudo docker pull "$REGISTRY_USER"/frontend_bc322211:1"  
+  
+   
+  only:
+    - frontend
+  environment:
+      name: production
+      url: http://18.223.206.231:3000/
